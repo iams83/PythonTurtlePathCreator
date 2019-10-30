@@ -53,7 +53,7 @@ public class PythonTurtlePathCreator
             
             g.fillRect(0, 0, image.getWidth(), image.getHeight());
             
-            g.translate(image.getWidth() / 2, image.getHeight() / 2 + g.getFontMetrics().getMaxAscent());
+            g.translate(image.getWidth() / 2, (image.getHeight() + g.getFontMetrics(font).getAscent()) / 2);
             
             for (TurtlePath p : turtlePaths)
             {
@@ -113,8 +113,113 @@ public class PythonTurtlePathCreator
         {
             this.start = new Point2D.Double(startX, startY);
         }
+        
+        private Point2D getLastPoint()
+        {
+            if (this.movements.isEmpty())
+                return this.start;
+            else
+                return this.movements.get(this.movements.size() - 1);
+        }
+
+        public void addCubicTo(double x2, double y2, double tx1, double ty1, double tx2, double ty2)
+        {
+            Point2D lastPoint = getLastPoint();
+            
+            double x1 = lastPoint.getX();
+            double y1 = lastPoint.getY();
+            
+            ArrayList<Point2D> tentativePath = getCubicPath(x1, y1, x2, y2, tx1, ty1, tx2, ty2, 10);
+            
+            tentativePath.add(0, lastPoint);
+            
+            double pathLength = getPathLength(tentativePath);
+            
+            this.movements.addAll(getCubicPath(x1, y1, x2, y2, tx1, ty1, tx2, ty2, (int) (pathLength / 3)));
+        }
     
-        public void add(double x, double y)
+        public void addQuadTo(double x2, double y2, double tx, double ty)
+        {
+            Point2D lastPoint = getLastPoint();
+            
+            double x1 = lastPoint.getX();
+            double y1 = lastPoint.getY();
+            
+            ArrayList<Point2D> tentativePath = getQuadPath(x1, y1, x2, y2, tx, ty, 10);
+            
+            tentativePath.add(0, lastPoint);
+            
+            double pathLength = getPathLength(tentativePath);
+            
+            this.movements.addAll(getQuadPath(x1, y1, x2, y2, tx, ty, (int) (pathLength / 3)));
+        }
+
+
+        private ArrayList<Point2D> getCubicPath(double x1, double y1, double x2, double y2, 
+                double tx1, double ty1, double tx2, double ty2, int chunks)
+        {
+            ArrayList<Point2D> points = new ArrayList<Point2D>();
+            
+            for (int i = 1; i <= chunks; i ++)
+            {
+                double d = 1. * i / chunks;
+                
+                double px1 = x1 + (tx1 - x1) * d;
+                double py1 = y1 + (ty1 - y1) * d;
+
+                double px2 = tx1 + (tx2 - tx1) * d;
+                double py2 = ty1 + (ty2 - ty1) * d;
+                
+                double px3 = tx2 + (x2 - tx2) * d;
+                double py3 = ty2 + (y2 - ty2) * d;
+                
+                double qx1 = px1 + (px2 - px1) * d;
+                double qy1 = py1 + (py2 - py1) * d;
+
+                double qx2 = px2 + (px3 - px2) * d;
+                double qy2 = py2 + (py3 - py2) * d;
+                
+                points.add(new Point2D.Double(
+                        qx1 + (qx2 - qx1) * d, 
+                        qy1 + (qy2 - qy1) * d));
+            }
+                
+            return points;
+        }
+        
+        private ArrayList<Point2D> getQuadPath(double x1, double y1, double x2,
+                double y2, double tx, double ty, int chunks)
+        {
+            ArrayList<Point2D> points = new ArrayList<>();
+            
+            for (int i = 1; i <= chunks; i ++)
+            {
+                double d = 1. * i / chunks;
+                
+                double px1 = x1 + (tx - x1) * d;
+                double py1 = y1 + (ty - y1) * d;
+
+                double px2 = tx + (x2 - tx) * d;
+                double py2 = ty + (y2 - ty) * d;
+                
+                points.add(new Point2D.Double(
+                        px1 + (px2 - px1) * d, 
+                        py1 + (py2 - py1) * d));
+            }
+            return points;
+        }
+
+        private double getPathLength(ArrayList<Point2D> path)
+        {
+            double d = 0;
+            
+            for (int i = path.size() - 1, j = 0; j < path.size(); i = j ++)
+                d += path.get(i).distance(path.get(j));
+            
+            return d;
+        }
+
+        public void addLineTo(double x, double y)
         {
             this.movements.add(new Point2D.Double(x, y));
         }
@@ -227,13 +332,35 @@ public class PythonTurtlePathCreator
 
                     break;
                 }
+
+                case PathIterator.SEG_CUBICTO:
+                {
+                    if (jump)
+                    {
+                        main = new TurtlePath(jmpX, jmpY);
+
+                        turtlePaths.add(main);
+                        
+                        jump = false;
+                    }
+                    
+                    main.addCubicTo(coords[4], coords[5], coords[0], coords[1], coords[2], coords[3]);
+                    break;
+                }
                 
                 case PathIterator.SEG_QUADTO:
                 {
-                    coords[0] = coords[2];
-                    coords[1] = coords[3];
+                    if (jump)
+                    {
+                        main = new TurtlePath(jmpX, jmpY);
+
+                        turtlePaths.add(main);
+                        
+                        jump = false;
+                    }
                     
-                    // continue on PathIterator.SEG_LINETO
+                    main.addQuadTo(coords[2], coords[3], coords[0], coords[1]);
+                    break;
                 }
                 
                 case PathIterator.SEG_LINETO:
@@ -247,7 +374,7 @@ public class PythonTurtlePathCreator
                         jump = false;
                     }
                     
-                    main.add(coords[0], coords[1]);
+                    main.addLineTo(coords[0], coords[1]);
                     break;
                 }
             }
